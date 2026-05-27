@@ -105,6 +105,14 @@
       margin-bottom: 1rem;
     }
 
+    .field.hidden-field {
+      display: none;
+    }
+
+    .field.hidden-field.visible {
+      display: block;
+    }
+
     .field label,
     .field .label-text {
       display: block;
@@ -327,15 +335,37 @@
         </div>
 
         <div class="field">
-          <label for="cpf">CPF</label>
-          <input type="text" id="cpf" name="cpf" inputmode="numeric" required placeholder="000.000.000-00" maxlength="14" />
+          <span class="label-text">Documento:</span>
+          <div class="choice-group" role="radiogroup" aria-label="Tipo de documento">
+            <input type="radio" name="documento_tipo" id="documento_tipo_cpf" value="cpf" required />
+            <label for="documento_tipo_cpf">CPF (Brasil)</label>
+            <input type="radio" name="documento_tipo" id="documento_tipo_ci" value="ci" />
+            <label for="documento_tipo_ci">C.I (Paraguai)</label>
+          </div>
+          <span class="error-msg" id="documento_tipo-error"></span>
+        </div>
+
+        <div class="field hidden-field" id="documento-field">
+          <label for="cpf" id="documento-label">CPF</label>
+          <input type="text" id="cpf" name="cpf" inputmode="numeric" required placeholder="Selecione o tipo de documento acima" maxlength="14" disabled />
           <span class="error-msg" id="cpf-error"></span>
         </div>
 
         <div class="field">
+          <span class="label-text">Número de WhatsApp é:</span>
+          <div class="choice-group" role="radiogroup" aria-label="País do WhatsApp">
+            <input type="radio" name="whatsapp_pais" id="whatsapp_pais_br" value="br" required />
+            <label for="whatsapp_pais_br">Brasileiro (+55)</label>
+            <input type="radio" name="whatsapp_pais" id="whatsapp_pais_py" value="py" />
+            <label for="whatsapp_pais_py">Paraguaio (+595)</label>
+          </div>
+          <span class="error-msg" id="whatsapp_pais-error"></span>
+        </div>
+
+        <div class="field hidden-field" id="whatsapp-field">
           <label for="whatsapp">WhatsApp</label>
-          <input type="tel" id="whatsapp" name="whatsapp" autocomplete="tel" required placeholder="(00) 00000-0000" maxlength="16" />
-          <span class="hint">Com DDD.</span>
+          <input type="tel" id="whatsapp" name="whatsapp" autocomplete="tel" required placeholder="Selecione o país do WhatsApp acima" maxlength="16" disabled />
+          <span class="hint">Escolha o país antes para habilitar a digitação.</span>
           <span class="error-msg" id="whatsapp-error"></span>
         </div>
 
@@ -439,9 +469,9 @@
           <span>Autorizo o uso dos meus dados para contato e atendimento pela PAPAPET Rações.</span>
         </label>
 
-        <button type="submit" class="btn-submit" id="submit-btn">ENVIAR MENSAGEM PARA CONFIRMAR</button>
-
         <div class="alert error" id="alert-error" role="alert"></div>
+
+        <button type="submit" class="btn-submit" id="submit-btn">ENVIAR MENSAGEM PARA CONFIRMAR</button>
       </form>
     </section>
 
@@ -462,7 +492,10 @@
     const gatoDetalhes = document.getElementById("gato-detalhes");
 
     const nomeInput = document.getElementById("nome");
+    const documentoField = document.getElementById("documento-field");
     const cpfInput = document.getElementById("cpf");
+    const documentoLabel = document.getElementById("documento-label");
+    const whatsappField = document.getElementById("whatsapp-field");
     const whatsappInput = document.getElementById("whatsapp");
     const marcaRacaoInput = document.getElementById("marca_racao");
 
@@ -472,12 +505,13 @@
 
     function buildWhatsAppMessage(data) {
       // Mensagem pronta para envio ao WhatsApp do sorteio.
+      const documentoTipoLabel = data.documento_tipo === "ci" ? "C.I" : "CPF";
       const linhas = [
         "Olá estou participando do SORTEIO PAPAPET",
         "",
         `Nome: ${data.nome}`,
-        `CPF: ${maskCpf(data.cpf)}`,
-        `WhatsApp: ${maskPhone(data.whatsapp)}`,
+        `Documento (${documentoTipoLabel}): ${data.documento_formatado}`,
+        `WhatsApp: ${formatPhone(data.whatsapp, data.whatsapp_pais)}`,
         `Já é cliente da PAPAPET? ${simNao(data.ja_cliente)}`,
       ];
 
@@ -526,16 +560,21 @@
       }
     }
 
-    function registerCpf(cpfDigits) {
+    function docKey(tipo, digits) {
+      return `${tipo}:${digits}`;
+    }
+
+    function registerCpf(tipo, digits) {
       const list = getRegisteredCpfs();
-      if (!list.includes(cpfDigits)) {
-        list.push(cpfDigits);
+      const key = docKey(tipo, digits);
+      if (!list.includes(key)) {
+        list.push(key);
         localStorage.setItem(CPF_STORAGE_KEY, JSON.stringify(list));
       }
     }
 
-    function isCpfAlreadyRegistered(cpfDigits) {
-      return getRegisteredCpfs().includes(cpfDigits);
+    function isCpfAlreadyRegistered(tipo, digits) {
+      return getRegisteredCpfs().includes(docKey(tipo, digits));
     }
 
     function isValidCpf(cpf) {
@@ -556,6 +595,13 @@
       return rest === parseInt(digits[10], 10);
     }
 
+    function isValidCi(doc) {
+      const d = onlyDigits(doc);
+      if (d.length !== 7) return false;
+      if (/^(\d)\1{6}$/.test(d)) return false;
+      return true;
+    }
+
     function isValidWhatsApp(digits) {
       return digits.length >= 10 && digits.length <= 11;
     }
@@ -568,11 +614,48 @@
       return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
     }
 
-    function maskPhone(value) {
+    function maskCi(value) {
+      const d = onlyDigits(value).slice(0, 7);
+      if (d.length <= 1) return d;
+      if (d.length <= 4) return `${d.slice(0, 1)}.${d.slice(1)}`;
+      return `${d.slice(0, 1)}.${d.slice(1, 4)}.${d.slice(4)}`;
+    }
+
+    function formatDocumento(digits, tipo) {
+      if (tipo === "cpf") return maskCpf(digits);
+      return maskCi(digits);
+    }
+
+    function formatPhone(digits, country) {
+      const d = onlyDigits(digits);
+      if (country === "py") {
+        const v = d.slice(0, 9);
+        if (v.length <= 3) return `+595 ${v}`.trim();
+        if (v.length <= 6) return `+595 ${v.slice(0, 3)} ${v.slice(3)}`;
+        return `+595 ${v.slice(0, 3)} ${v.slice(3, 6)} ${v.slice(6)}`;
+      }
+      const v = d.slice(0, 11);
+      if (v.length <= 2) return v.length ? `+55 (${v}` : "+55 ";
+      if (v.length <= 7) return `+55 (${v.slice(0, 2)}) ${v.slice(2)}`;
+      return `+55 (${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
+    }
+
+    function maskPhone(value, country) {
+      if (country === "py") {
+        const d = onlyDigits(value).slice(0, 9);
+        if (d.length <= 3) return d;
+        if (d.length <= 6) return `${d.slice(0, 3)} ${d.slice(3)}`;
+        return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+      }
       const d = onlyDigits(value).slice(0, 11);
       if (d.length <= 2) return d.length ? `(${d}` : "";
       if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
       return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    }
+
+    function isValidWhatsAppByCountry(digits, country) {
+      if (country === "py") return digits.length >= 6 && digits.length <= 9;
+      return isValidWhatsApp(digits);
     }
 
     function getRadio(name) {
@@ -669,12 +752,52 @@
       });
     });
 
+    form.querySelectorAll('input[name="whatsapp_pais"]').forEach((el) => {
+      el.addEventListener("change", () => {
+        const country = getRadio("whatsapp_pais");
+        whatsappField.classList.add("visible");
+        whatsappInput.disabled = false;
+        const digits = onlyDigits(whatsappInput.value);
+        whatsappInput.value = maskPhone(digits, country);
+        if (country === "py") {
+          whatsappInput.placeholder = "000 000 000";
+          whatsappInput.maxLength = 11;
+        } else {
+          whatsappInput.placeholder = "(00) 00000-0000";
+          whatsappInput.maxLength = 16;
+        }
+      });
+    });
+
+    form.querySelectorAll('input[name="documento_tipo"]').forEach((el) => {
+      el.addEventListener("change", () => {
+        const tipo = getRadio("documento_tipo") || "cpf";
+        documentoField.classList.add("visible");
+        cpfInput.disabled = false;
+        const digits = onlyDigits(cpfInput.value);
+        if (tipo === "ci") {
+          documentoLabel.textContent = "C.I";
+          cpfInput.placeholder = "-.---.---";
+          cpfInput.maxLength = 9;
+          cpfInput.value = maskCi(digits);
+        } else {
+          documentoLabel.textContent = "CPF";
+          cpfInput.placeholder = "000.000.000-00";
+          cpfInput.maxLength = 14;
+          cpfInput.value = maskCpf(digits);
+        }
+      });
+    });
+
     cpfInput.addEventListener("input", (e) => {
-      e.target.value = maskCpf(e.target.value);
+      const tipo = getRadio("documento_tipo") || "cpf";
+      if (tipo === "ci") e.target.value = maskCi(e.target.value);
+      else e.target.value = maskCpf(e.target.value);
     });
 
     whatsappInput.addEventListener("input", (e) => {
-      e.target.value = maskPhone(e.target.value);
+      const country = getRadio("whatsapp_pais") || "br";
+      e.target.value = maskPhone(e.target.value, country);
     });
 
     function validateForm() {
@@ -690,18 +813,38 @@
         valid = false;
       }
 
+      const documentoTipo = requireRadio("documento_tipo", "tipo de documento");
+      if (!documentoTipo) valid = false;
+
       const cpfDigits = onlyDigits(cpfInput.value);
-      if (!isValidCpf(cpfDigits)) {
-        showFieldError("cpf", "Informe um CPF válido.");
-        valid = false;
-      } else if (isCpfAlreadyRegistered(cpfDigits)) {
-        showFieldError("cpf", "Este CPF já foi cadastrado. Não é possível cadastrar novamente.");
-        valid = false;
+      if ((documentoTipo || "cpf") === "ci") {
+        if (!isValidCi(cpfDigits)) {
+          showFieldError("cpf", "Informe um C.I válido.");
+          showGlobalError("C.I inválido. Corrija para continuar.");
+          valid = false;
+        } else if (isCpfAlreadyRegistered("ci", cpfDigits)) {
+          showFieldError("cpf", "Este C.I já foi cadastrado. Não é possível cadastrar novamente.");
+          showGlobalError("Este documento já foi cadastrado.");
+          valid = false;
+        }
+      } else {
+        if (!isValidCpf(cpfDigits)) {
+          showFieldError("cpf", "Informe um CPF válido.");
+          showGlobalError("CPF inválido. Corrija para continuar.");
+          valid = false;
+        } else if (isCpfAlreadyRegistered("cpf", cpfDigits)) {
+          showFieldError("cpf", "Este CPF já foi cadastrado. Não é possível cadastrar novamente.");
+          showGlobalError("Este documento já foi cadastrado.");
+          valid = false;
+        }
       }
 
+      const whatsappPais = requireRadio("whatsapp_pais", "se o número é brasileiro ou paraguaio");
+      if (!whatsappPais) valid = false;
+
       const whatsappDigits = onlyDigits(whatsappInput.value);
-      if (!isValidWhatsApp(whatsappDigits)) {
-        showFieldError("whatsapp", "Informe um WhatsApp válido com DDD.");
+      if (!isValidWhatsAppByCountry(whatsappDigits, whatsappPais || "br")) {
+        showFieldError("whatsapp", "Informe um WhatsApp válido para o país selecionado.");
         valid = false;
       }
 
@@ -752,7 +895,10 @@
       return {
         ja_cliente: jaCliente,
         nome,
+        documento_tipo: documentoTipo || "cpf",
         cpf: cpfDigits,
+        documento_formatado: formatDocumento(cpfDigits, documentoTipo || "cpf"),
+        whatsapp_pais: whatsappPais,
         whatsapp: whatsappDigits,
         tem_cachorro: temCachorro,
         cachorro_mais_1_ano: cachorroMais1Ano,
@@ -778,10 +924,12 @@
       const payload = {
         ja_cliente: data.ja_cliente,
         nome: data.nome,
+        documento_tipo: data.documento_tipo,
         cpf: data.cpf,
-        cpf_formatado: maskCpf(data.cpf),
+        cpf_formatado: data.documento_formatado,
+        whatsapp_pais: data.whatsapp_pais,
         whatsapp: data.whatsapp,
-        whatsapp_formatado: maskPhone(data.whatsapp),
+        whatsapp_formatado: formatPhone(data.whatsapp, data.whatsapp_pais),
         tem_cachorro: data.tem_cachorro,
         cachorro_mais_1_ano: data.cachorro_mais_1_ano,
         cachorro_pequeno_porte: data.cachorro_pequeno_porte,
@@ -805,7 +953,7 @@
           throw new Error(`Erro ${response.status}`);
         }
 
-        registerCpf(data.cpf);
+        registerCpf(data.documento_tipo, data.cpf);
         const message = buildWhatsAppMessage(data);
         const whatsappUrl = `${WHATSAPP_BASE_URL}?text=${encodeURIComponent(message)}`;
         window.location.href = whatsappUrl;
